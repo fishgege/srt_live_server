@@ -2,6 +2,7 @@
 #define SRT_HANDLE_H
 #include "srt/srt.h"
 #include "srt_conn.h"
+#include "gopcache/ts_gop_cache.h"
 
 #include <thread>
 #include <memory>
@@ -37,6 +38,7 @@ private:
     int _file_offset;
 
     std::unordered_map<std::string, std::unordered_map<SRTSOCKET, int>> _streamid_map;//streamid, list<SRTSOCKET>
+    ts_gop_cache _gop_cache_obj;
     std::mutex _conn_mutex;
 };
 }

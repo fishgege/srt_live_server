@@ -2,17 +2,17 @@ CC = gcc
 C++ = g++  
 LINK = g++  
 
-LIBS = -L/usr/local/lib -pthread -llog4cplus -lsrt
+LIBS = -L/usr/local/lib -pthread -llog4cplus
 
 #must add -fPIC option  
 CCFLAGS = $(COMPILER_FLAGS) -c -g  -fPIC -Wall
 C++FLAGS = $(COMPILER_FLAGS) -c -g -fPIC -Wall -std=c++11
   
-TARGET=srt_live_server
+TARGET=mpeg_ts_demux_test
   
-INCLUDES = -I. -I./sys -I./net -I./logging -I./rapidjson -I./rapidjson/include
+INCLUDES = -I. -I../logging -I.. -I../include -I../include/srt
 
-C++FILES = ./srt_live_server.cpp ./srtserver/srt_server.cpp ./srtserver/srt_handle.cpp ./gopcache/ts_gop_cache.cpp
+C++FILES = ./ts_gop_cache.cpp ./mpeg_ts_demux_test.cpp
 CFILES = 
 
 OBJFILE = $(CFILES:.c=.o) $(C++FILES:.cpp=.o)  

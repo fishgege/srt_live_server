@@ -49,6 +49,10 @@ int srt_handle::send_media_data(std::string stream_id, char* data_p, int data_si
         //    stream_id.c_str(), data_size, iter->second.size());
         std::vector<SRTSOCKET> remove_list;
         for (auto map_iter = iter->second.begin(); map_iter != iter->second.end(); map_iter++) {
+            if (map_iter->second == 0) {
+                _gop_cache_obj.send_gop_cache(stream_id, (SRTSOCKET)(map_iter->first));
+                map_iter->second = 1;
+            }
             int ret = srt_send((SRTSOCKET)(map_iter->first), data_p, data_size);
             if (ret == SRT_ERROR) {
                 remove_list.push_back((SRTSOCKET)(map_iter->first));
@@ -66,11 +70,11 @@ void srt_handle::add_srtsocket(SRTSOCKET write_srtsocket, std::string stream_id)
     auto iter = _streamid_map.find(stream_id);
     if (iter == _streamid_map.end()) {
         std::unordered_map<SRTSOCKET, int> srtsocket_map;
-        srtsocket_map.insert(std::pair<SRTSOCKET, int>(write_srtsocket, 1));
+        srtsocket_map.insert(std::pair<SRTSOCKET, int>(write_srtsocket, 0));
 
         _streamid_map.insert(std::pair<std::string, std::unordered_map<SRTSOCKET, int>>(stream_id, srtsocket_map));
     } else {
-        iter->second.insert(std::pair<SRTSOCKET, int>(write_srtsocket, 1));
+        iter->second.insert(std::pair<SRTSOCKET, int>(write_srtsocket, 0));
     }
 
     return;
@@ -130,6 +134,7 @@ void srt_handle::onwork() {
                             continue;
                         }
     
+                        _gop_cache_obj.save_gop_cache(read_data_p, READ_LEN, streamid);
                         rcv_total += ret;
                         send_media_data(streamid, read_data_p, ret);
     
@@ -155,7 +160,8 @@ void srt_handle::onwork() {
                         if (ret <= 0) {
                             continue;
                         }
-    
+                        
+                        _gop_cache_obj.save_gop_cache(read_data_p, READ_LEN, streamid);
                         rcv_total += ret;
                         send_media_data(streamid, read_data_p, ret);
     
