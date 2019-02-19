@@ -52,33 +52,30 @@ void ts_gop_cache::save_gop_cache(char* data_p, int data_len, std::string stream
         //pid:xxxo oooo oooo oooo
         ts_header_info.PID = ((int(ts_data_p[1] & 0x1f)) << 8) | ts_data_p[2];
 
-        InfoLogf("sync_byte=0x%02x, transport_error_indicator=%d, payload_unit_start_indicator=%d, \
+        //InfoLogf("sync_byte=0x%02x, transport_error_indicator=%d, payload_unit_start_indicator=%d, \
 transport_priority=%d, transport_scrambling_control=%d, adaptation_field_control=%d, continuity_counter=%d, PID=%d", 
-            ts_header_info.sync_byte,
-            ts_header_info.transport_error_indicator,
-            ts_header_info.payload_unit_start_indicator,
-            ts_header_info.transport_priority,
-            ts_header_info.transport_scrambling_control,
-            ts_header_info.adaptation_field_control,
-            ts_header_info.continuity_counter,
-            ts_header_info.PID);
+            //ts_header_info.sync_byte,
+            //ts_header_info.transport_error_indicator,
+            //ts_header_info.payload_unit_start_indicator,
+            //ts_header_info.transport_priority,
+            //ts_header_info.transport_scrambling_control,
+            //ts_header_info.adaptation_field_control,
+            //ts_header_info.continuity_counter,
+            //ts_header_info.PID);
         int offset = 4;
+        unsigned char adaptation_length;
 
         if (TS_PID_SDT == ts_header_info.PID) {
             return;
         }
         if (ts_header_info.adaptation_field_control & 0x02) {
-            unsigned char adaptation_length = ts_data_p[offset++];
-            InfoLogf("adaption length=%d", adaptation_length);
+            adaptation_length = ts_data_p[offset++];
             offset += adaptation_length;
         }
 
         bool is_pmt = false;
 
         if (ts_header_info.adaptation_field_control & 0x01) {
-            if (ts_header_info.PID == TS_PID_PAT) {
-                clear_media_packet(streamid);
-            }
             if ((ts_header_info.PID == TS_PID_PAT) && (_pat_p[0] == 0)) {
                 InfoLog("ts packet is PAT...");
                 if (ts_header_info.payload_unit_start_indicator) {
@@ -104,10 +101,12 @@ transport_priority=%d, transport_scrambling_control=%d, adaptation_field_control
                 }
             }
 
-            if ((ts_header_info.PID != TS_PID_PAT) && !is_pmt && (ts_header_info.continuity_counter == 0)) {
+            if ((ts_header_info.PID != TS_PID_PAT) && !is_pmt && ts_header_info.payload_unit_start_indicator) {
                 ts_pes_header pes_header_info;
-                InfoLogf("pes offset=%d", offset);
-                pes_is_iframe(ts_data_p + offset, MPEG_TS_SIZE - offset, pes_header_info);
+                //InfoLogf("pes offset=%d", offset);
+                if (pes_is_iframe(ts_data_p + offset, MPEG_TS_SIZE - offset, pes_header_info)) {
+                    clear_media_packet(streamid);
+                }
             }
         }
         insert_media_packet(streamid, ts_data_p, MPEG_TS_SIZE);
@@ -121,16 +120,70 @@ bool ts_gop_cache::pes_is_iframe(char* data_p, int data_len, ts_pes_header& pes_
     pes_header_info.PES_packet_length = int(data_p[4]) << 8 | data_p[5];
 
     if (pes_header_info.packet_start_code_prefix != 0x000001) {
-        InfoLogBody("error media offset:", (unsigned char*)data_p, 64);
+        InfoLogBody("error media offset:", (unsigned char*)data_p, 128);
         return false;
     }
-    //....data_p[6]
-    //....data_p[7]
+    pes_header_info.PES_scrambling_control = (data_p[6] & 0x30) >> 4;
+    pes_header_info.PES_priority = (data_p[6] & 0x08) >> 3;
+    pes_header_info.data_alignment_indicator = (data_p[6] & 0x04) >> 2;
+    pes_header_info.copyright = (data_p[6] & 0x02) >> 1;
+    pes_header_info.original_or_copy = data_p[6] & 0x01;
+
+    pes_header_info.PTS_DTS_flags = (data_p[7] & 0xc0) >> 6;
+    pes_header_info.ESCR_flag = (data_p[7] & 0x20) >> 5;
+    pes_header_info.ES_rate_flag = (data_p[7] & 0x10) >> 4;
+    pes_header_info.DSM_trick_mode_flag = (data_p[7] & 0x08) >> 3;
+    pes_header_info.additional_copy_info_flag = (data_p[7] & 0x04) >> 2;
+    pes_header_info.PES_CRC_flag = (data_p[7] & 0x02) >> 1;
+    pes_header_info.PES_extension_flag = data_p[7] & 0x01;
+
     pes_header_info.PES_header_data_length = (unsigned char)data_p[8];
 
-    InfoLogf("start_code=0x%06x", pes_header_info.packet_start_code_prefix);
-    InfoLogf("media length:%d", pes_header_info.PES_header_data_length);
-    InfoLogBody("media_header:", (unsigned char*)data_p+pes_header_info.PES_header_data_length+9, 64);
+    //InfoLogf("start_code=0x%06x", pes_header_info.packet_start_code_prefix);
+    //InfoLogf("media header_length:%d, data_alignment_indicator=%d", 
+    //    pes_header_info.PES_header_data_length, pes_header_info.data_alignment_indicator);
+
+    bool ret = find_key_frame(data_p + pes_header_info.PES_header_data_length + 9, 
+                              MPEG_TS_SIZE - pes_header_info.PES_header_data_length - 9);
+
+    return ret;
+}
+
+bool ts_gop_cache::find_key_frame(char* data_p, int data_len) {
+    if ((data_p == nullptr) || (data_len <=3) || (data_len >= MPEG_TS_SIZE)) {
+        return false;
+    }
+
+    bool is_pps = false;
+    bool is_sps = false;
+    bool is_idr = false;
+    //char dscr[128];
+    //sprintf(dscr, "media_header len=%d", data_len);
+    //InfoLogBody(dscr, (unsigned char*)data_p, 16);
+    for (int index = 3; index < data_len; index++) {
+        if (((data_p[index-1] == 0x01) && (data_p[index-2] == 0x00) && (data_p[index-3] == 0x00)) ||
+            ((data_p[index-1] == 0x01) && (data_p[index-2] == 0x00) && (data_p[index-3] == 0x00) && (data_p[index-4] == 0x00))){
+            unsigned char nal_type = data_p[index] & 0x1f;
+            //InfoLogf("find_key_frame nalu_type=0x%02x", nal_type);
+            if (nal_type == 0x07) {
+                //InfoLogBody("key frame", (unsigned char*)(data_p+index-4), 8);
+                is_pps = true;
+            }
+            if ((nal_type == 0x07) || (nal_type == 0x08) || (nal_type == 0x05)) {
+                //InfoLogBody("key frame", (unsigned char*)(data_p+index-4), 8);
+                is_sps = true;
+            }
+            if ((nal_type == 0x07) || (nal_type == 0x08) || (nal_type == 0x05)) {
+                //InfoLogBody("key frame", (unsigned char*)(data_p+index-4), 8);
+                is_idr = true;
+            }
+        }
+    }
+
+    if (is_pps || is_sps || is_idr) {
+        InfoLogf("find_key_frame: pps=%d, sps=%d, idr=%d", is_pps, is_sps, is_idr);
+        return true;
+    }
     return false;
 }
 
@@ -144,11 +197,24 @@ int ts_gop_cache::send_gop_cache(std::string streamid, SRTSOCKET dst_srtsocket) 
         return 0;
     }
 
+    srt_send(dst_srtsocket, _pat_p, MPEG_TS_SIZE);
+    srt_send(dst_srtsocket, _pmt_p, MPEG_TS_SIZE);
+    
     std::list<std::shared_ptr<Media_Packet>> packet_list = iter->second;
 
     for (auto packet_iter = packet_list.begin(); packet_iter != packet_list.end(); packet_iter++) {
-        gop_total += (*packet_iter)->get_size();
-        srt_send(dst_srtsocket, (*packet_iter)->get_data(), (*packet_iter)->get_size());
+        char *send_data = (*packet_iter)->get_data();
+        int send_size = (*packet_iter)->get_size();
+        int done_size = 0;
+        do {
+            int ret = srt_send(dst_srtsocket, send_data + done_size, send_size - done_size);
+            if (ret <= 0) {
+                ErrorLogf("send_gop_cache srt_send error, streamid=%s", streamid.c_str());
+                return gop_total;
+            }
+            done_size += ret;
+        } while(done_size < send_size);
+        gop_total += send_size;
     }
     InfoLogf("send_gop_cache send steamid=%s, total=%d", streamid.c_str(), gop_total);
     return gop_total;
@@ -230,9 +296,8 @@ void ts_gop_cache::clear_media_packet(std::string streamid) {
     if (iter == _packet_map.end()) {
         return;
     }
-
+    //WarnLogf("clear_media_packet streamid=%s, list_len=%d", streamid.c_str(), iter->second.size());
     iter->second.clear();
-
     
     return;
 }

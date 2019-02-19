@@ -190,6 +190,7 @@ private:
 	void clear_media_packet(std::string streamid);
     void insert_media_packet(std::string streamid, char* data_p, int data_len);
 
+    bool find_key_frame(char* data_p, int data_len);
 private:
     char _pat_p[MPEG_TS_SIZE];
     char _pmt_p[MPEG_TS_SIZE];
