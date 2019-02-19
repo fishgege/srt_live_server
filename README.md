@@ -2,6 +2,10 @@
 live server based on srt protocal<br/>
 srt_live_server是基于SRT传输协议的直播服务，支持mpegts格式的推流，拉流。<br/>
 当前ffmpeg4.1版本以上已经支持srt协议，可以用ffmpeg/ffplay进行测试验证。
+当前支持功能：
+* srt live push: srt直播推流
+* srt live pull: srt直播拉流
+* srt live mpegts gop: srt直播gop cache缓存
 
 ## 1. 编译简介
 ### 1.1 编译libsrt库
@@ -42,7 +46,7 @@ ffmpeg -re -i 100.flv -c copy -f mpegts srt://127.0.0.1:9090?streamid=100
 ### 3.3 拉流
 输入命令行: <br/>
 <pre>
-ffplay srt://127.0.0.1:9091?streamid=100
+ffplay -probesize 20000 srt://127.0.0.1:9091?streamid=100
 </pre>
 可以观看对应的streamid=100的视频<br/>
 注意：端口号是9091，拉流端口号=推流端口号+1
