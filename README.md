@@ -52,8 +52,8 @@ ffplay -probesize 20000 srt://127.0.0.1:9091?streamid=100
 注意：端口号是9091，拉流端口号=推流端口号+1
 
 ## 4. Roadmap
-### 4.1 gop缓存: 2009.02.19 commited.
-### 4.2 支持兼容rtmp
+### 4.1 gop缓存: 2019.02.19 commited.
+### 4.2 支持兼容rtmp：计划2019年完成
 * 支持srt转推到rtmp服务器
 * 支持srt向rtmp服务器回源
 
