@@ -1,7 +1,7 @@
 # srt_live_server
 live server based on srt protocal<br/>
 srt_live_server是基于SRT传输协议的直播服务，支持mpegts格式的推流，拉流。<br/>
-当前ffmpeg4.1版本以上已经支持srt协议，可以用ffmpeg/ffplay进行测试验证。
+当前ffmpeg4.1版本以上已经支持srt协议，可以用ffmpeg/ffplay进行测试验证。<br/>
 当前支持功能：
 * srt live push: srt直播推流
 * srt live pull: srt直播拉流
@@ -52,7 +52,10 @@ ffplay -probesize 20000 srt://127.0.0.1:9091?streamid=100
 注意：端口号是9091，拉流端口号=推流端口号+1
 
 ## 4. Roadmap
-### 4.1 还未支持gop缓存，2019.02.30前上线。
+### 4.1 gop缓存: 2009.02.19 commited.
+### 4.2 支持兼容rtmp
+* 支持srt转推到rtmp服务器
+* 支持srt向rtmp服务器回源
 
 ## 5. 相关连接
 srt协议文档翻译：[srt_protocal](https://github.com/runner365/read_book/blob/master/SRT/srt_protocol.md)
