@@ -3,12 +3,17 @@
 #include "include/srt/udt.h"
 #include <stdio.h>
 #include <vector>
+#include <sstream>
+#include <iomanip>
 
 namespace srt_media {
 
 #define QUEUE_MAX_SIZE 10
 
-srt_handle::srt_handle() {
+const unsigned long MONITOR_TIMEOUT = 5000;
+bool MONITOR_STATICS_ENABLE = true;
+
+srt_handle::srt_handle():_last_timestamp(0) {
 
 }
 
@@ -57,6 +62,7 @@ int srt_handle::send_media_data(std::string stream_id, char* data_p, int data_si
             if (ret == SRT_ERROR) {
                 remove_list.push_back((SRTSOCKET)(map_iter->first));
             }
+            debug_statics(map_iter->first, stream_id);
         }
 
         for (int index = 0; index < remove_list.size(); index++) {
@@ -64,6 +70,40 @@ int srt_handle::send_media_data(std::string stream_id, char* data_p, int data_si
         }
     }
     return list_size;
+}
+
+void srt_handle::debug_statics(SRTSOCKET srtsocket, const std::string& streamid) {
+    SRT_TRACEBSTATS mon;
+    srt_bstats(srtsocket, &mon, 1);
+    std::ostringstream output;
+    unsigned long now_ul = now_ms();
+
+    if (!MONITOR_STATICS_ENABLE) {
+        return;
+    }
+    if (_last_timestamp == 0) {
+        _last_timestamp = now_ul;
+        return;
+    }
+
+    if ((now_ul - _last_timestamp) < MONITOR_TIMEOUT) {
+        return;
+    }
+    _last_timestamp = now_ul;
+    output << "======= SRT STATS: sid=" << streamid << std::endl;
+    output << "PACKETS     SENT: " << std::setw(11) << mon.pktSent            << "  RECEIVED:   " << std::setw(11) << mon.pktRecv              << std::endl;
+    output << "LOST PKT    SENT: " << std::setw(11) << mon.pktSndLoss         << "  RECEIVED:   " << std::setw(11) << mon.pktRcvLoss           << std::endl;
+    output << "REXMIT      SENT: " << std::setw(11) << mon.pktRetrans         << "  RECEIVED:   " << std::setw(11) << mon.pktRcvRetrans        << std::endl;
+    output << "DROP PKT    SENT: " << std::setw(11) << mon.pktSndDrop         << "  RECEIVED:   " << std::setw(11) << mon.pktRcvDrop           << std::endl;
+    output << "RATE     SENDING: " << std::setw(11) << mon.mbpsSendRate       << "  RECEIVING:  " << std::setw(11) << mon.mbpsRecvRate         << std::endl;
+    output << "BELATED RECEIVED: " << std::setw(11) << mon.pktRcvBelated      << "  AVG TIME:   " << std::setw(11) << mon.pktRcvAvgBelatedTime << std::endl;
+    output << "REORDER DISTANCE: " << std::setw(11) << mon.pktReorderDistance << std::endl;
+    output << "WINDOW      FLOW: " << std::setw(11) << mon.pktFlowWindow      << "  CONGESTION: " << std::setw(11) << mon.pktCongestionWindow  << "  FLIGHT: " << std::setw(11) << mon.pktFlightSize << std::endl;
+    output << "LINK         RTT: " << std::setw(9)  << mon.msRTT            << "ms  BANDWIDTH:  " << std::setw(7)  << mon.mbpsBandwidth    << "Mb/s " << std::endl;
+    output << "BUFFERLEFT:  SND: " << std::setw(11) << mon.byteAvailSndBuf    << "  RCV:        " << std::setw(11) << mon.byteAvailRcvBuf      << std::endl;
+
+    InfoLogf("\r\n%s", output.str().c_str());
+    return;
 }
 
 void srt_handle::add_srtsocket(SRTSOCKET write_srtsocket, std::string stream_id) {
@@ -233,6 +273,23 @@ int srt_handle::read_tsfile(char* data_p, int data_len) {
 
 void srt_handle::add_newconn(std::shared_ptr<srt_conn> conn_ptr, int events) {
     InfoLogf("new conn added: %d", conn_ptr->get_conn());
+
+    int val_i;
+    int opt_len = sizeof(int);
+
+    val_i = 1000;
+    srt_setsockopt(conn_ptr->get_conn(), 0, SRTO_LATENCY, &val_i, opt_len);
+    val_i = 2048;
+    srt_setsockopt(conn_ptr->get_conn(), 0, SRTO_MAXBW, &val_i, opt_len);
+
+    srt_getsockopt(conn_ptr->get_conn(), 0, SRTO_LATENCY, &val_i, &opt_len);
+    InfoLogf("srto SRTO_LATENCY=%d", val_i);
+    srt_getsockopt(conn_ptr->get_conn(), 0, SRTO_SNDBUF, &val_i, &opt_len);
+    InfoLogf("srto SRTO_SNDBUF=%d", val_i);
+    srt_getsockopt(conn_ptr->get_conn(), 0, SRTO_RCVBUF, &val_i, &opt_len);
+    InfoLogf("srto SRTO_RCVBUF=%d", val_i);
+    srt_getsockopt(conn_ptr->get_conn(), 0, SRTO_MAXBW, &val_i, &opt_len);
+    InfoLogf("srto SRTO_MAXBW=%d", val_i);
 
     int ret = srt_epoll_add_usock(_handle_pollid, conn_ptr->get_conn(), &events);
     if (ret < 0) {

@@ -181,7 +181,7 @@ bool ts_gop_cache::find_key_frame(char* data_p, int data_len) {
     }
 
     if (is_pps || is_sps || is_idr) {
-        InfoLogf("find_key_frame: pps=%d, sps=%d, idr=%d", is_pps, is_sps, is_idr);
+        //InfoLogf("find_key_frame: pps=%d, sps=%d, idr=%d", is_pps, is_sps, is_idr);
         return true;
     }
     return false;

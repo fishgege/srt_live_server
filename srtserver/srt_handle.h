@@ -3,6 +3,7 @@
 #include "srt/srt.h"
 #include "srt_conn.h"
 #include "gopcache/ts_gop_cache.h"
+#include "sys/timehelp.h"
 
 #include <thread>
 #include <memory>
@@ -31,6 +32,8 @@ private:
     int send_media_data(std::string stream_id, char* data_p, int data_size);
     void add_srtsocket(SRTSOCKET write_srtsocket, std::string stream_id);
     void remove_srtsocket(SRTSOCKET srtsocket, std::string stream_id);
+
+    void debug_statics(SRTSOCKET srtsocket, const std::string& streamid);
 private:
     int _handle_pollid;
     std::unordered_map<SRTSOCKET, std::shared_ptr<srt_conn>> _conn_map;
@@ -40,6 +43,8 @@ private:
     std::unordered_map<std::string, std::unordered_map<SRTSOCKET, int>> _streamid_map;//streamid, list<SRTSOCKET>
     ts_gop_cache _gop_cache_obj;
     std::mutex _conn_mutex;
+
+    unsigned long _last_timestamp;
 };
 }
 
